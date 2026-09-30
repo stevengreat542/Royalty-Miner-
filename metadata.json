@@ -1,0 +1,6 @@
+{
+  "name": "Royalty Miner - Earn Bitcoin Satoshis",
+  "description": "Stack Satoshis through interactive Proof-of-Work mining simulations, Lightning faucet drops, Bitcoin trivia challenges, micro-tasks, and instant Lightning ledger management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
