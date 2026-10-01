@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="100" fill="#0a0a0a"/>
+  <rect x="16" y="16" width="480" height="480" rx="84" fill="none" stroke="#f59e0b" stroke-width="12" stroke-opacity="0.3"/>
+  <circle cx="256" cy="256" r="200" fill="url(#amber-grad)" opacity="0.15"/>
+  <defs>
+    <linearGradient id="amber-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fbbf24"/>
+      <stop offset="100%" stop-color="#d97706"/>
+    </linearGradient>
+    <linearGradient id="gold-metal" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fef08a"/>
+      <stop offset="50%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#b45309"/>
+    </linearGradient>
+  </defs>
+  <!-- Crown Header -->
+  <path d="M 176 170 L 216 195 L 256 150 L 296 195 L 336 170 L 320 225 L 192 225 Z" fill="url(#gold-metal)"/>
+  <!-- Pickaxe Shaft & Head -->
+  <g transform="translate(256, 280) rotate(-45) translate(-128, -128)">
+    <rect x="120" y="40" width="16" height="180" rx="8" fill="#d97706"/>
+    <path d="M 40 50 C 90 20, 166 20, 216 50 C 190 70, 150 80, 128 90 C 106 80, 66 70, 40 50 Z" fill="url(#gold-metal)"/>
+  </g>
+  <!-- Bitcoin B Symbol -->
+  <text x="256" y="380" font-family="'JetBrains Mono', monospace, sans-serif" font-size="72" font-weight="900" fill="#fbbf24" text-anchor="middle">⚡</text>
+</svg>

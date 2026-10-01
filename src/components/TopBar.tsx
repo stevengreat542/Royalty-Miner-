@@ -80,7 +80,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           })}
         </nav>
 
-        {/* Zone 3: Streak, Sound toggle & Username right close to 🔇 */}
+        {/* Zone 3: Streak, Sound toggle & Username */}
         <div className="flex items-center gap-2 sm:gap-2.5">
           {/* Quick Streak Indicator Button */}
           <button
@@ -183,17 +183,17 @@ export const TopBar: React.FC<TopBarProps> = ({
       </div>
 
       {/* Mobile nav scroll strip */}
-      <div className="flex md:hidden overflow-x-auto px-4 py-2 border-t border-neutral-900 gap-1.5 no-scrollbar">
+      <div className="flex md:hidden overflow-x-auto px-4 pr-8 py-2.5 border-t border-neutral-900 gap-2 no-scrollbar scroll-smooth">
         {navItems.map((item) => {
           const isActive = activeTab === item.id;
           return (
             <button
               key={item.id}
               onClick={() => setActiveTab(item.id)}
-              className={`px-3 py-1 text-xs font-medium rounded-md whitespace-nowrap shrink-0 transition-colors ${
+              className={`px-3.5 py-1.5 text-xs font-medium rounded-lg whitespace-nowrap shrink-0 transition-colors shadow-sm ${
                 isActive
-                  ? 'text-amber-300 bg-neutral-900 border border-neutral-800'
-                  : 'text-neutral-400 hover:text-neutral-200'
+                  ? 'text-amber-300 bg-neutral-900 border border-neutral-800 font-semibold'
+                  : 'text-neutral-400 hover:text-neutral-200 bg-neutral-950/60 border border-neutral-800/40'
               }`}
             >
               {item.label}

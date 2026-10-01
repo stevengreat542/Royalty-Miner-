@@ -13,6 +13,7 @@ import { LedgerSection } from './components/LedgerSection';
 import { TopPoolMinersLeaderboard } from './components/TopPoolMinersLeaderboard';
 import { WalletModal } from './components/WalletModal';
 import { AuthModal } from './components/AuthModal';
+import { OfflineIndicator } from './components/OfflineIndicator';
 import { testFirestoreConnection } from './lib/firebase';
 
 function AppContent() {
@@ -78,8 +79,8 @@ function AppContent() {
       {/* Footer conforming to anti-slop guidelines */}
       <footer className="w-full border-t border-neutral-900 bg-neutral-950/80 py-8 px-4 text-xs text-neutral-500">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-neutral-400">SatoshiMining</span>
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="font-semibold text-neutral-400">Royalty Miner</span>
             <span className="text-neutral-700" aria-hidden="true">·</span>
             <span>1 BTC = 100,000,000 Satoshis</span>
           </div>
@@ -102,6 +103,9 @@ function AppContent() {
         onClose={() => setIsAuthModalOpen(false)}
         initialMode={authInitialMode}
       />
+
+      {/* Connectivity Indicator */}
+      <OfflineIndicator />
     </div>
   );
 }

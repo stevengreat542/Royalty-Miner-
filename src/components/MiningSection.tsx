@@ -175,20 +175,17 @@ export const MiningSection: React.FC<MiningSectionProps> = ({ onOpenLeaderboard 
     return () => clearInterval(timer);
   }, [isAutoMining, cycleState, totalHashRate, processHashRound]);
 
-  // Master Timer: Controls the 5-Minute Mining Session and 24-Hour Cooldown Break
+  // Master Timer: Controls the 5-Minute Mining Session and Continuous Auto-Loop
   useEffect(() => {
     const timer = setInterval(() => {
       if (cycleState === 'mining' && isAutoMining) {
         setMiningTimeRemaining(prev => {
           if (prev <= 1) {
-            // 5 minutes session reached! Transition to 24-hour break
-            setIsAutoMining(false);
-            setCycleState('cooldown');
-            setCooldownRemaining(TWENTY_FOUR_HOURS_SECONDS);
-            const cooldownEnd = Date.now() + TWENTY_FOUR_HOURS_SECONDS * 1000;
-            saveCycleState('cooldown', 0, cooldownEnd);
-            sound.playLightningZap();
-            return 0;
+            // Epoch finished! Auto-loop for continuous mining without lockout
+            const next = FIVE_MINUTES_SECONDS;
+            saveCycleState('mining', next);
+            sound.playWin();
+            return next;
           }
           const next = prev - 1;
           saveCycleState('mining', next);
@@ -197,7 +194,6 @@ export const MiningSection: React.FC<MiningSectionProps> = ({ onOpenLeaderboard 
       } else if (cycleState === 'cooldown') {
         setCooldownRemaining(prev => {
           if (prev <= 1) {
-            // 24 hours cooldown finished! Miner is ready again
             setCycleState('idle');
             setMiningTimeRemaining(FIVE_MINUTES_SECONDS);
             saveCycleState('idle', FIVE_MINUTES_SECONDS);
@@ -610,7 +606,9 @@ export const MiningSection: React.FC<MiningSectionProps> = ({ onOpenLeaderboard 
               </div>
               <div className="flex items-center gap-1.5 text-neutral-400">
                 <span className="text-neutral-500">Rig Duty:</span>
-                <span className="text-emerald-400 font-bold">5m Epoch / 24h Off</span>
+                <span className={`font-bold ${isAutoMining ? 'text-emerald-400' : 'text-amber-400'}`}>
+                  {isAutoMining ? 'Active PoW Epoch' : cycleState === 'cooldown' ? 'Cooling' : 'Standby'}
+                </span>
               </div>
             </div>
           </div>
